@@ -13,10 +13,11 @@ import (
 
 type model struct {
 	// main model state
-	mode      view
-	activeTab int
-	Err       error
-	cMode     configMode
+	store      *user.Store
+	activeView view
+	activeTab  int
+	Err        error
+	cMode      configMode
 
 	// Show list of users
 	listModel list.Model
@@ -26,7 +27,9 @@ type model struct {
 	focusIndex int
 }
 
-func initialModel(cMode configMode, currentView view) *model {
+func initialModel(store *user.Store, cMode configMode, currentView view) *model {
+	users := store.GetUsers()
+
 	items := make([]list.Item, len(users))
 	for i, u := range users {
 		items[i] = u
@@ -38,10 +41,11 @@ func initialModel(cMode configMode, currentView view) *model {
 	listModel.AdditionalFullHelpKeys = userListKeys
 
 	m := model{
-		inputs:    make([]textinput.Model, 3),
-		listModel: listModel,
-		mode:      listView,
-		cMode:     localConfig,
+		store:      store,
+		inputs:     make([]textinput.Model, 3),
+		listModel:  listModel,
+		activeView: currentView,
+		cMode:      cMode,
 	}
 
 	var t textinput.Model
@@ -73,9 +77,8 @@ func (m *model) saveNewUser() tea.Cmd {
 		Username:   m.inputs[0].Value(),
 		Email:      m.inputs[1].Value(),
 		SigningKey: m.inputs[2].Value(),
-		ShouldSign: false,
 	}
-	users = append(users, u)
+	m.Err = m.store.AddUser(u)
 	return m.listModel.InsertItem(len(m.listModel.Items()), u)
 }
 
@@ -90,10 +93,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c":
 			return m, tea.Quit
 		case "right", "tab", "left", "shift+tab":
-			if m.mode == listView {
-				m.mode = addView
+			if m.activeView == listView {
+				m.activeView = addView
 			} else {
-				m.mode = listView
+				m.activeView = listView
 			}
 			return m, nil
 		case "ctrl+g":
@@ -106,7 +109,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	if m.mode == listView {
+	if m.activeView == listView {
 		var cmd tea.Cmd
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
@@ -119,6 +122,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if len(m.listModel.Items()) > 0 {
 					removedUser := m.listModel.SelectedItem().(user.User)
 					m.listModel.RemoveItem(m.listModel.Index())
+					m.store.RemoveUser(removedUser)
 					return m, m.listModel.NewStatusMessage(fmt.Sprintf("User: %s is removed", removedUser.Username))
 				}
 			}
@@ -138,7 +142,7 @@ func (m *model) View() string {
 	tabs := []string{"Select User", "Add User"}
 	for i, t := range tabs {
 		var style lipgloss.Style
-		isFirst, isLast, isActive := i == 0, i == len(tabs)-1, i == int(m.mode)
+		isFirst, isLast, isActive := i == 0, i == len(tabs)-1, i == int(m.activeView)
 		if isActive {
 			style = activeTabStyle.Copy()
 		} else {
@@ -161,8 +165,8 @@ func (m *model) View() string {
 	row := lipgloss.JoinHorizontal(lipgloss.Top, renderedTabs...)
 	doc.WriteString(row)
 	doc.WriteString("\n")
-	if m.mode == listView {
-		// Set title here to show config mode dynamically
+	if m.activeView == listView {
+		// Set title here to show config activeView dynamically
 		m.listModel.Title = fmt.Sprintf("List of Users (%s config)", m.cMode)
 		doc.WriteString(windowStyle.Width(60 - windowStyle.GetHorizontalFrameSize()).
 			Render(m.listModel.View()))
@@ -213,8 +217,8 @@ func (m *model) updateInputs(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// If so, exit.
 			if s == "enter" && m.focusIndex == len(m.inputs) {
 				cmd := m.saveNewUser()
-				// reset to view mode
-				m.mode = listView
+				// reset to view activeView
+				m.activeView = listView
 				m.resetAddForm()
 
 				return m, cmd
