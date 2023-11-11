@@ -3,10 +3,10 @@ package main
 import (
 	"errors"
 	"fmt"
-	tea "github.com/charmbracelet/bubbletea"
-	gap "github.com/muesli/go-app-paths"
 	"os"
 
+	tea "github.com/charmbracelet/bubbletea"
+	gap "github.com/muesli/go-app-paths"
 	"github.com/nirav24/gituser/user"
 )
 
@@ -34,7 +34,6 @@ func main() {
 	}
 
 	dir := dirs[0]
-	//dir := "."
 	fileName := "/data.json"
 	if _, err := os.Stat(dir + fileName); errors.Is(err, os.ErrNotExist) {
 		err := createFile(dir, fileName)

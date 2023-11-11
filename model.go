@@ -2,22 +2,25 @@ package main
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/nirav24/gituser/user"
-	"strings"
 )
 
 type model struct {
 	// main model state
 	store      *user.Store
 	activeView view
-	activeTab  int
 	Err        error
 	cMode      configMode
+
+	height int
+	width  int
 
 	// Show list of users
 	listModel list.Model
@@ -34,7 +37,7 @@ func initialModel(store *user.Store, cMode configMode, currentView view) *model 
 	for i, u := range users {
 		items[i] = u
 	}
-	listModel := list.New(items, itemDelegate{}, 60, 30)
+	listModel := list.New(items, list.NewDefaultDelegate(), 0, 0)
 	listModel.SetShowStatusBar(false)
 	listModel.SetShowPagination(false)
 	listModel.AdditionalShortHelpKeys = userListKeys
@@ -42,7 +45,7 @@ func initialModel(store *user.Store, cMode configMode, currentView view) *model 
 
 	m := model{
 		store:      store,
-		inputs:     make([]textinput.Model, 3),
+		inputs:     make([]textinput.Model, 5),
 		listModel:  listModel,
 		activeView: currentView,
 		cMode:      cMode,
@@ -55,15 +58,19 @@ func initialModel(store *user.Store, cMode configMode, currentView view) *model 
 
 		switch i {
 		case 0:
-			t.Placeholder = "Nickname"
+			t.Placeholder = "Username: "
 			t.Focus()
 			t.PromptStyle = focusedStyle
 			t.TextStyle = focusedStyle
 		case 1:
-			t.Placeholder = "Email"
+			t.Placeholder = "Email: "
 			t.CharLimit = 64
 		case 2:
 			t.Placeholder = "Signing Key (Optional): "
+		case 3:
+			t.Placeholder = "Sign Commits: (Yes / No)"
+		case 4:
+			t.Placeholder = "Format: (openpgp, ssh)"
 		}
 
 		m.inputs[i] = t
@@ -74,9 +81,11 @@ func initialModel(store *user.Store, cMode configMode, currentView view) *model 
 
 func (m *model) saveNewUser() tea.Cmd {
 	u := user.User{
-		Username:   m.inputs[0].Value(),
-		Email:      m.inputs[1].Value(),
-		SigningKey: m.inputs[2].Value(),
+		Username:    m.inputs[0].Value(),
+		Email:       m.inputs[1].Value(),
+		SigningKey:  m.inputs[2].Value(),
+		SignCommits: strings.ToLower(m.inputs[3].Value()) == "yes",
+		GpgFormat:   m.inputs[4].Value(),
 	}
 	m.Err = m.store.AddUser(u)
 	return m.listModel.InsertItem(len(m.listModel.Items()), u)
@@ -107,6 +116,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+	case tea.WindowSizeMsg:
+		m.height = msg.Height
+		m.width = msg.Width
+		m.listModel.SetWidth(msg.Width)
+		m.listModel.SetHeight(msg.Height - 10)
 	}
 
 	if m.activeView == listView {
@@ -116,22 +130,26 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch keypress := msg.String(); keypress {
 			case "enter":
 				currentUser := m.listModel.SelectedItem().(user.User)
-				return m, tea.Sequence(m.listModel.NewStatusMessage(fmt.Sprintf("User: %s is set", currentUser.Username)), tea.Quit)
+				m.Err = setConfig(currentUser, m.cMode)
+				return m, tea.Sequence(m.successMessage(fmt.Sprintf("%s is set", currentUser.Username)), tea.Quit)
 			case "backspace":
-				// only invoke list update if there is any item
+				// only invoke if there is any item in list
 				if len(m.listModel.Items()) > 0 {
 					removedUser := m.listModel.SelectedItem().(user.User)
 					m.listModel.RemoveItem(m.listModel.Index())
 					m.store.RemoveUser(removedUser)
-					return m, m.listModel.NewStatusMessage(fmt.Sprintf("User: %s is removed", removedUser.Username))
+					return m, m.successMessage(fmt.Sprintf("User: %s is removed", removedUser.Username))
 				}
 			}
 		}
 		m.listModel, cmd = m.listModel.Update(msg)
-
+		if m.Err != nil {
+			msg := m.Err.Error()
+			m.Err = nil // reset error
+			return m, m.failMessage(msg)
+		}
 		return m, cmd
 	}
-
 	return m.updateInputs(msg)
 }
 
@@ -140,6 +158,12 @@ func (m *model) View() string {
 
 	var renderedTabs []string
 	tabs := []string{"Select User", "Add User"}
+	width := m.width
+
+	if width%2 == 1 {
+		width = width - 1
+	}
+
 	for i, t := range tabs {
 		var style lipgloss.Style
 		isFirst, isLast, isActive := i == 0, i == len(tabs)-1, i == int(m.activeView)
@@ -158,21 +182,23 @@ func (m *model) View() string {
 		} else if isLast && !isActive {
 			border.BottomRight = "┤"
 		}
-		style = style.Border(border)
-		renderedTabs = append(renderedTabs, style.Width(30-windowStyle.GetHorizontalFrameSize()).Render(t))
+		style = style.Border(border).
+			Width((width - style.GetHorizontalFrameSize()) / 2)
+
+		renderedTabs = append(renderedTabs, style.Render(t))
 	}
 
 	row := lipgloss.JoinHorizontal(lipgloss.Top, renderedTabs...)
 	doc.WriteString(row)
 	doc.WriteString("\n")
+	style := windowStyle.Copy().Width(width - windowStyle.GetHorizontalFrameSize())
+
 	if m.activeView == listView {
 		// Set title here to show config activeView dynamically
 		m.listModel.Title = fmt.Sprintf("List of Users (%s config)", m.cMode)
-		doc.WriteString(windowStyle.Width(60 - windowStyle.GetHorizontalFrameSize()).
-			Render(m.listModel.View()))
+		doc.WriteString(style.Render(m.listModel.View()))
 	} else {
-		doc.WriteString(windowStyle.Width(60 - windowStyle.GetHorizontalFrameSize()).
-			Render(m.viewAddUserForm()))
+		doc.WriteString(style.Render(m.viewAddUserForm()))
 	}
 
 	return docStyle.Render(doc.String())
@@ -280,4 +306,12 @@ func (m *model) resetAddForm() {
 		}
 	}
 
+}
+
+func (m *model) successMessage(message string) tea.Cmd {
+	return m.listModel.NewStatusMessage(successStyle.Render(message))
+}
+
+func (m *model) failMessage(message string) tea.Cmd {
+	return m.listModel.NewStatusMessage(failStyle.Render(message))
 }
