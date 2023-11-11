@@ -9,8 +9,8 @@ import (
 type User struct {
 	Username    string `json:"username" cmd:"user.name"`
 	Email       string `json:"email" cmd:"user.email"`
-	SigningKey  string `json:"signingKey" cmd:"user.signingKey"`
-	SignCommits bool   `json:"gpgSign" cmd:"commit.gpgsign"`
+	SigningKey  string `json:"signingKey" cmd:"user.signingkey"`
+	SignCommits *bool  `json:"gpgSign" cmd:"commit.gpgsign"`
 	GpgFormat   string `json:"gpgFormat" cmd:"gpg.format"`
 }
 
@@ -34,7 +34,7 @@ func (u User) Description() string {
 		b.WriteString(" | ")
 	}
 
-	if u.SignCommits {
+	if u.SignCommits != nil && *u.SignCommits {
 		b.WriteString("Auto sign commits")
 	} else {
 		b.WriteString("Do not sign commits")

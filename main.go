@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	gap "github.com/muesli/go-app-paths"
+
 	"github.com/nirav24/gituser/user"
 )
 
@@ -24,9 +25,10 @@ const (
 	addView
 )
 
-func main() {
+const appName = "gituser"
 
-	scope := gap.NewScope(gap.User, "git-user")
+func main() {
+	scope := gap.NewScope(gap.User, appName)
 	dirs, err := scope.DataDirs()
 	if err != nil {
 		fmt.Println("Error creating user store: ", err)
@@ -48,7 +50,6 @@ func main() {
 		fmt.Println("Error creating user store: ", err)
 		os.Exit(1)
 	}
-
 	defer func() {
 		if err := store.Close(); err != nil {
 			fmt.Println("Error updating users: ", err)

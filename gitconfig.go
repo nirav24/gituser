@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
-	"github.com/nirav24/gituser/user"
 	"os/exec"
 	"reflect"
+	"strconv"
+
+	"github.com/nirav24/gituser/user"
 )
 
 func setConfig(u user.User, cMode configMode) error {
@@ -43,11 +45,11 @@ func setConfig(u user.User, cMode configMode) error {
 			} else if isValueSet(cmdTag, cMode) {
 				newArgs = append(newArgs, "--unset", cmdTag)
 			}
-		} else if rv.Field(i).Kind() == reflect.Bool {
-			if rv.Field(i).Bool() {
-				newArgs = append(newArgs, cmdTag, "true")
-			} else if isValueSet(cmdTag, cMode) {
+		} else if rv.Field(i).Type().Kind() == reflect.Pointer {
+			if rv.Field(i).IsNil() && isValueSet(cmdTag, cMode) {
 				newArgs = append(newArgs, "--unset", cmdTag)
+			} else if rv.Field(i).Elem().Kind() == reflect.Bool {
+				newArgs = append(newArgs, cmdTag, strconv.FormatBool(rv.Field(i).Elem().Bool()))
 			}
 		}
 		// if we did not add any new arg to newArgs,

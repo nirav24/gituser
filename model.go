@@ -80,11 +80,18 @@ func initialModel(store *user.Store, cMode configMode, currentView view) *model 
 }
 
 func (m *model) saveNewUser() tea.Cmd {
+	var signCommits *bool
+	if strings.ToLower(m.inputs[3].Value()) == "yes" {
+		signCommits = pointer(true)
+	} else if m.inputs[3].Value() != "" {
+		signCommits = pointer(false)
+	}
+
 	u := user.User{
 		Username:    m.inputs[0].Value(),
 		Email:       m.inputs[1].Value(),
 		SigningKey:  m.inputs[2].Value(),
-		SignCommits: strings.ToLower(m.inputs[3].Value()) == "yes",
+		SignCommits: signCommits,
 		GpgFormat:   m.inputs[4].Value(),
 	}
 	m.Err = m.store.AddUser(u)
@@ -120,7 +127,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.width = msg.Width
 		m.listModel.SetWidth(msg.Width)
-		m.listModel.SetHeight(msg.Height - 10)
+		m.listModel.SetHeight(msg.Height - 20)
 	}
 
 	if m.activeView == listView {
@@ -131,7 +138,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "enter":
 				currentUser := m.listModel.SelectedItem().(user.User)
 				m.Err = setConfig(currentUser, m.cMode)
-				return m, tea.Sequence(m.successMessage(fmt.Sprintf("%s is set", currentUser.Username)), tea.Quit)
+				if m.Err != nil {
+					return m.showAndResetErr()
+				}
+				return m, tea.Sequence(m.successMessage(fmt.Sprintf("%s is set", currentUser.Username)))
 			case "backspace":
 				// only invoke if there is any item in list
 				if len(m.listModel.Items()) > 0 {
@@ -144,12 +154,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.listModel, cmd = m.listModel.Update(msg)
 		if m.Err != nil {
-			msg := m.Err.Error()
-			m.Err = nil // reset error
-			return m, m.failMessage(msg)
+			return m.showAndResetErr()
 		}
 		return m, cmd
 	}
+
+	// if view is addView, then call updateInputs
 	return m.updateInputs(msg)
 }
 
@@ -314,4 +324,18 @@ func (m *model) successMessage(message string) tea.Cmd {
 
 func (m *model) failMessage(message string) tea.Cmd {
 	return m.listModel.NewStatusMessage(failStyle.Render(message))
+}
+
+func (m *model) showAndResetErr() (tea.Model, tea.Cmd) {
+	if m.Err == nil {
+		return m, nil
+	}
+
+	msg := m.Err.Error()
+	m.Err = nil // reset error
+	return m, m.failMessage(msg)
+}
+
+func pointer[T any](value T) *T {
+	return &value
 }

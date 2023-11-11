@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -25,10 +26,7 @@ var (
 			Align(lipgloss.Left).
 			Border(lipgloss.NormalBorder()).UnsetBorderTop()
 
-	noStyle           = lipgloss.NewStyle()
-	itemStyle         = lipgloss.NewStyle().PaddingLeft(4)
-	selectedItemStyle = lipgloss.NewStyle().PaddingLeft(2).
-				Foreground(lipgloss.Color("170"))
+	noStyle = lipgloss.NewStyle()
 
 	focusedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("170"))
 	blurredStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
