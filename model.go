@@ -136,6 +136,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyMsg:
 			switch keypress := msg.String(); keypress {
 			case "enter":
+				// only invoke if there is any item in list
+				if len(m.listModel.Items()) == 0 {
+					return m, nil
+				}
 				currentUser := m.listModel.SelectedItem().(user.User)
 				m.Err = setConfig(currentUser, m.cMode)
 				if m.Err != nil {
