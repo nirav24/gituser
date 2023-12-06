@@ -1,0 +1,46 @@
+name: Build And Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    name: Build-release
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        go-version: ['1.20']
+        os:
+          - { name: linux, arch: amd64 }
+          - { name: linux, arch: arm64 }
+          - { name: darwin, arch: amd64 }
+          - { name: darwin, arch: arm64 }
+          - { name: windows, arch: amd64 }
+  
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: ${{ matrix.go-version }}
+
+    - name: Build
+      run: |
+        GOOS=${{ matrix.os.name }} GOARCH=${{ matrix.os.arch }} go build -o gituser .
+    
+    - name: Zip Artifact
+      run: |
+          cd .
+          zip gituser-${{ matrix.os.name }}-${{ matrix.os.arch }}.zip  gituser
+      working-directory: .
+
+    - name: Upload Binary
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: gituser-${{ matrix.os.name }}-${{ matrix.os.arch }}.zip
+
