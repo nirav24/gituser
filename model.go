@@ -145,7 +145,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.Err != nil {
 					return m.showAndResetErr()
 				}
-				return m, tea.Sequence(m.successMessage(fmt.Sprintf("%s is set", currentUser.Username)))
+				return m, tea.Sequence(m.successMessage(fmt.Sprintf("%s is set", currentUser.Username)), tea.Quit)
 			case "backspace":
 				// only invoke if there is any item in list
 				if len(m.listModel.Items()) > 0 {
